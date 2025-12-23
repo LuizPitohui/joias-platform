@@ -212,3 +212,20 @@ def create_user_profile(sender, instance, created, **kwargs):
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
+
+class Address(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='addresses')
+    name = models.CharField(max_length=50, default="Casa") 
+    zip_code = models.CharField(max_length=9) # Mudei a ordem só pra organizar
+    street = models.CharField(max_length=200)
+    neighborhood = models.CharField(max_length=100)
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=2)
+    number = models.CharField(max_length=20)
+    
+    # NOVOS CAMPOS
+    complement = models.CharField(max_length=100, blank=True, null=True) # Apt/Bloco
+    reference_point = models.CharField(max_length=200, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.zip_code}"

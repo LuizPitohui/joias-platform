@@ -1,7 +1,7 @@
 from django.contrib.auth.password_validation import validate_password
 from django.core.validators import RegexValidator
 from rest_framework import serializers
-from .models import User, Address, SiteSettings, Category, Product, ProductImage, ProductAttribute, AttributeValue, CustomRequest, Order, OrderItem
+from .models import User, Address, SiteSettings, Category, Product, ProductImage, ProductAttribute, AttributeValue, CustomRequest, Order, OrderItem, Address
 
 
 # --- CONFIGURAÇÃO DO SITE ---
@@ -216,3 +216,11 @@ class RegistrationSerializer(serializers.ModelSerializer):
             user.profile.save()
             
         return user
+    
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = [
+            'id', 'name', 'zip_code', 'street', 'neighborhood', 
+            'city', 'state', 'number', 'complement', 'reference_point'
+        ]

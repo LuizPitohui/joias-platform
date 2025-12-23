@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation"; 
-import { Search, ShoppingBag, Menu, X, User, ChevronDown } from "lucide-react";
+import { Search, ShoppingBag, Menu, X, User, ChevronDown, UserCircle, Package, LogOut} from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { getCategories, api } from "@/services/api";

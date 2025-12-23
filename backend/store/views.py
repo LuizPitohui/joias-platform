@@ -5,10 +5,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, permissions, status, filters 
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from .models import User, SiteSettings, Category, Product, CustomRequest, ProductImage, Order
+from .models import User, SiteSettings, Category, Product, CustomRequest, ProductImage, Order, Address
 from .serializers import (
     UserSerializer, SiteSettingsSerializer, CategorySerializer, 
-    ProductSerializer, CustomRequestSerializer, ProductImageSerializer, OrderSerializer
+    ProductSerializer, CustomRequestSerializer, ProductImageSerializer, OrderSerializer, AddressSerializer
 )
 #logica para verificacao de sms
 from rest_framework import generics, status
@@ -139,3 +139,32 @@ class VerifySMSCodeView(APIView):
             return Response({"message": "Telefone verificado com sucesso!"})
         
         return Response({"error": "Código inválido"}, status=status.HTTP_400_BAD_REQUEST)
+    
+# Adicione esta classe NO FINAL do arquivo
+class UserMeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "is_staff": user.is_staff, # Importante para saber se é Admin
+            # Adicione dados do perfil se necessário
+            "phone": user.profile.phone if hasattr(user, 'profile') else None
+        })
+    
+class AddressViewSet(viewsets.ModelViewSet):
+    serializer_class = AddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Filtra apenas os endereços do usuário logado
+        return Address.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        # Ao criar, associa automaticamente ao usuário logado
+        serializer.save(user=self.request.user)

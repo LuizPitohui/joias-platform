@@ -4,13 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { api } from "@/services/api";
+import { api } from "@/services/api"; // <--- Importante
 import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 
-// O erro aconteceu porque talvez faltasse o "export default" aqui
 export default function LoginPage() {
   const router = useRouter();
-  // Pegamos a função login do contexto
   const { login } = useAuth();
   
   const [email, setEmail] = useState("");
@@ -25,30 +23,40 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // 1. Obtém o Token
-      const response = await api.post("/token/", {
-        username: email, 
+      // 1. FAZ A REQUISIÇÃO AQUI NA PÁGINA
+      // O Django SimpleJWT espera a chave "username", mesmo que estejamos usando email.
+      // Usamos .toLowerCase() para garantir compatibilidade.
+      const payload = {
+        username: email.toLowerCase().trim(), 
         password: password
-      });
+      };
 
-      // 2. Tenta logar no contexto e receber os dados do usuário
+      console.log("Enviando login:", payload); // Debug no console do navegador
+
+      const response = await api.post("/token/", payload);
+
+      // 2. SE DEU CERTO, PASSA OS TOKENS PRO CONTEXTO
       const userData = await login(response.data.access, response.data.refresh);
       
-      // 3. Redirecionamento Inteligente
+      // 3. REDIRECIONAMENTO INTELIGENTE
       if (userData) {
         if (userData.is_staff) {
-          router.push("/admin/dashboard"); // Se for Chefe -> Admin
+          router.push("/admin/dashboard");
         } else {
-          router.push("/"); // Se for Cliente -> Loja
+          router.push("/"); // Cliente vai pra Home
         }
       } else {
-        // Fallback caso não retorne dados (manda pra home)
         router.push("/");
       }
       
-    } catch (err) {
-      setError("Email ou senha incorretos.");
-      console.error(err);
+    } catch (err: any) {
+      console.error("Erro detalhado:", err.response?.data); // Ajuda a ver o erro real
+      
+      if (err.response?.status === 401) {
+        setError("Email ou senha incorretos.");
+      } else {
+        setError("Erro ao conectar com o servidor.");
+      }
     } finally {
       setLoading(false);
     }
@@ -56,7 +64,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      
       <div className="sm:mx-auto sm:w-full sm:max-w-md mb-6">
          <Link href="/" className="flex items-center justify-center text-gray-500 hover:text-emerald-800 transition gap-2">
             <ArrowLeft className="w-4 h-4" /> Voltar para a Loja
