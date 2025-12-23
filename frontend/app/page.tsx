@@ -1,103 +1,115 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link"; // <--- Importante para o botão funcionar
-import { getProducts } from "@/services/api";
-
-// Atualizei a tipagem para incluir a imagem e o slug
-interface ProductImage {
-  id: number;
-  image: string;
-}
+import { getProducts, getCategories, getProductsByCategory } from "@/services/api";
+import ProductRow from "@/components/ProductRow";
+import Link from "next/link";
 
 interface Product {
   id: number;
   name: string;
-  slug: string; // Precisamos disso para o link
+  slug: string;
   base_price: string;
-  category_name: string;
-  images: ProductImage[]; // Lista de imagens que vem do Django
+  promotional_price?: string | null;
+  images: any[];
 }
 
 export default function Home() {
-  const [products, setProducts] = useState<Product[]>([]);
+  // Estados para cada seção do diagrama
+  const [newArrivals, setNewArrivals] = useState<Product[]>([]);
+  const [offers, setOffers] = useState<Product[]>([]);
+  
+  // Categorias Dinâmicas (Anéis, Colares, Brincos)
+  const [cat1Products, setCat1Products] = useState<Product[]>([]);
+  const [cat2Products, setCat2Products] = useState<Product[]>([]);
+  const [cat3Products, setCat3Products] = useState<Product[]>([]);
+  
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadData() {
-      const data = await getProducts();
-      setProducts(data);
+    async function loadHomeData() {
+      setLoading(true);
+      
+      // 1. Busca todos os produtos para filtrar Novidades e Ofertas
+      const allProducts = await getProducts();
+      
+      // Lógica Novidades: Os últimos cadastrados (Inverte o array e pega 5)
+      // Como o ID cresce, os ultimos IDs são os mais novos
+      const sortedByNew = [...allProducts].sort((a, b) => b.id - a.id);
+      setNewArrivals(sortedByNew);
+
+      // Lógica Ofertas: Produtos com promotional_price
+      const productsWithOffers = allProducts.filter((p: Product) => p.promotional_price);
+      setOffers(productsWithOffers);
+
+      // 2. Busca produtos das categorias específicas para as linhas de baixo
+      // (No futuro, o Admin Panel vai definir quais slugs aparecem aqui)
+      const dataCat1 = await getProductsByCategory('aneis');
+      setCat1Products(dataCat1);
+
+      const dataCat2 = await getProductsByCategory('colares');
+      setCat2Products(dataCat2);
+
+      const dataCat3 = await getProductsByCategory('brincos');
+      setCat3Products(dataCat3);
+
       setLoading(false);
     }
-    loadData();
+    loadHomeData();
   }, []);
 
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-white">Carregando vitrine...</div>;
+
   return (
-    <main className="min-h-screen p-8 bg-gray-50 flex flex-col items-center">
-      <h1 className="text-3xl font-bold mb-8 text-emerald-800">
-        Coleção Exclusiva
-      </h1>
+    <main className="bg-white min-h-screen">
+      
+      {/* Banner Hero (Opcional, mas comum em homes) */}
+      <div className="w-full bg-emerald-900 text-white py-16 px-4 text-center mb-8">
+        <h1 className="text-4xl md:text-6xl font-serif mb-4">Elegância Eterna</h1>
+        <p className="text-emerald-100 max-w-xl mx-auto mb-8">Descubra a nova coleção de joias artesanais feitas para brilhar em todos os momentos.</p>
+        <Link href="/categoria/aneis" className="bg-white text-emerald-900 px-8 py-3 rounded-full font-bold hover:bg-emerald-50 transition">
+          Ver Coleção
+        </Link>
+      </div>
 
-      {loading ? (
-        <p className="text-lg text-gray-600 animate-pulse">Carregando joias...</p>
-      ) : (
-        <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {products.length === 0 ? (
-            <div className="text-center col-span-3">
-              <p className="text-red-500 font-bold">Nenhum produto encontrado.</p>
-              <p className="text-sm text-gray-500">Cadastre produtos com fotos no Admin!</p>
-            </div>
-          ) : (
-            products.map((product) => {
-              // Pega a primeira imagem ou usa um placeholder se não tiver foto
-              const coverImage = product.images.length > 0 
-                ? product.images[0].image 
-                : null;
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+        
+        {/* SEÇÃO 1: NOVIDADES (Diagrama item 22 e cards) */}
+        <ProductRow 
+          title="Novidades" 
+          products={newArrivals} 
+          seeMoreLink="/categoria/novidades" // Podemos criar essa rota depois ou apontar para 'aneis'
+        />
 
-              return (
-                <div key={product.id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg transition duration-300 overflow-hidden flex flex-col">
-                  
-                  {/* --- 1. ÁREA DA IMAGEM --- */}
-                  <div className="h-64 w-full bg-gray-100 relative">
-                    {coverImage ? (
-                      <img 
-                        src={coverImage} 
-                        alt={product.name} 
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        Sem Foto
-                      </div>
-                    )}
-                  </div>
+        {/* SEÇÃO 2: OFERTAS (Diagrama item 23 e cards) */}
+        {offers.length > 0 && (
+          <ProductRow 
+            title="Ofertas Especiais" 
+            products={offers} 
+            seeMoreLink="/ofertas" 
+          />
+        )}
 
-                  {/* --- 2. INFORMAÇÕES --- */}
-                  <div className="p-6 flex flex-col flex-grow">
-                    <span className="text-xs font-bold text-emerald-600 uppercase tracking-wide mb-1">
-                      {product.category_name}
-                    </span>
-                    <h2 className="text-xl font-serif text-gray-900 mb-2">{product.name}</h2>
-                    
-                    <div className="mt-auto pt-4 flex items-center justify-between border-t border-gray-50">
-                      <span className="text-lg font-bold text-gray-900">
-                        R$ {product.base_price}
-                      </span>
-                      
-                      {/* --- 3. BOTÃO AGORA COM LINK --- */}
-                      <Link href={`/produto/${product.slug}`}>
-                        <button className="px-4 py-2 bg-black text-white text-sm font-medium rounded hover:bg-gray-800 transition">
-                          Ver Detalhes
-                        </button>
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
+        {/* SEÇÕES 3, 4, 5: CATEGORIAS (Diagrama itens 56, 57, 58) */}
+        <ProductRow 
+          title="Anéis Exclusivos" 
+          products={cat1Products} 
+          seeMoreLink="/categoria/aneis" 
+        />
+
+        <ProductRow 
+          title="Colares" 
+          products={cat2Products} 
+          seeMoreLink="/categoria/colares" 
+        />
+
+        <ProductRow 
+          title="Brincos" 
+          products={cat3Products} 
+          seeMoreLink="/categoria/brincos" 
+        />
+
+      </div>
     </main>
   );
 }

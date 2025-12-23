@@ -1,25 +1,34 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google"; // Fonte bonita padrão
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
-import Navbar from "@/components/Navbar"; // <--- IMPORTANTE
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import CartSidebar from "@/components/CartSidebar"; // <--- 1. Importe aqui
+import { CartProvider } from "@/context/CartContext";
+import { AuthProvider } from "@/context/AuthContext";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair" });
 
 export const metadata: Metadata = {
   title: "Joalheria Exclusiva",
-  description: "Loja de joias personalizadas",
+  description: "Joias finas e personalizadas",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
-      <body className={inter.className}>
-        <Navbar />  {/* <--- AQUI ESTÁ ELA! Fixa no topo */}
-        {children}  {/* Aqui entra o conteúdo da página (Home, Produto, etc) */}
+      <body className={`${inter.variable} ${playfair.variable} font-sans`}>
+        <AuthProvider> {/* <--- Envolva TUDO aqui primeiro */}
+          <CartProvider>
+            <Navbar />
+            <CartSidebar />
+            <div className="min-h-screen">
+              {children}
+            </div>
+            <Footer />
+          </CartProvider>
+        </AuthProvider>
       </body>
     </html>
   );

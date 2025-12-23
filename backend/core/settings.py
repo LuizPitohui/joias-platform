@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     # Apps de terceiros
     'rest_framework',
     'corsheaders',
+    'django_filters',
     # Nossos Apps
     'store',
 ]
@@ -141,3 +142,10 @@ MEDIA_URL = '/media/'
 
 # A pasta física no computador onde as fotos serão salvas
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
+}
