@@ -6,32 +6,36 @@ import { useAuth } from "@/context/AuthContext";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
   const router = useRouter();
-  const pathname = usePathname(); // Pega a rota atual
 
   useEffect(() => {
-    // Se não estiver carregando e não estiver logado, chuta pro login
-    // Mas permite ficar na própria página de login para não criar loop
-    if (!loading && !isAuthenticated && pathname !== "/admin/login") {
-      router.push("/admin/login");
+    if (!loading) {
+      // 1. Se não estiver logado -> Manda pro Login
+      if (!isAuthenticated) {
+        router.push("/login");
+        return;
+      }
+
+      // 2. Se estiver logado MAS NÃO FOR STAFF -> Manda pra Home (Segurança)
+      if (user && !user.is_staff) {
+        alert("Acesso negado. Área restrita para administradores.");
+        router.push("/");
+      }
     }
-  }, [loading, isAuthenticated, router, pathname]);
+  }, [user, loading, isAuthenticated, router]);
 
-  // Se for a página de login, renderiza sem sidebar
-  if (pathname === "/admin/login") {
-    return <>{children}</>;
-  }
+  if (loading) return <div className="p-10 text-center">Carregando painel...</div>;
 
-  // Se não estiver logado (e não for login), mostra nada enquanto redireciona
-  if (!isAuthenticated) return null;
+  // Se não for admin, não renderiza nada enquanto redireciona
+  if (!user?.is_staff) return null; 
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <div className="flex bg-gray-50 min-h-screen font-sans">
       <AdminSidebar />
-      <div className="flex-1 ml-64 p-8">
+      <main className="flex-1 ml-64 p-8">
         {children}
-      </div>
+      </main>
     </div>
   );
 }

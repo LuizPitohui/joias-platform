@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation"; 
 import { Search, ShoppingBag, Menu, X, User, ChevronDown } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
 import { getCategories, api } from "@/services/api";
 
 interface Category {
@@ -24,7 +25,9 @@ interface ProductSuggestion {
 
 export default function Navbar() {
   // 2. CHAMA O HOOK AQUI EM CIMA
-  const pathname = usePathname(); 
+  const pathname = usePathname();
+  const { user, logout } = useAuth(); // <--- Pegamos o usuário e o logout
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false); // <--- Estado para o menu do usuário 
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -196,7 +199,62 @@ export default function Navbar() {
               )}
             </div>
 
-            <button className="text-gray-900 hover:text-emerald-800 transition"><User className="w-5 h-5" /></button>
+            {/* --- ÁREA DO USUÁRIO (LOGIN / PERFIL) --- */}
+            <div className="relative">
+              <button 
+                onClick={() => user ? setIsUserMenuOpen(!isUserMenuOpen) : router.push('/login')}
+                className="flex items-center gap-2 text-gray-900 hover:text-emerald-800 transition"
+              >
+                {user ? (
+                  <>
+                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-800 font-bold text-xs">
+                      {user.first_name ? user.first_name[0] : <User className="w-4 h-4" />}
+                    </div>
+                    <span className="text-sm font-medium hidden lg:block">
+                      Olá, {user.first_name}
+                    </span>
+                  </>
+                ) : (
+                  <User className="w-6 h-6" />
+                )}
+              </button>
+
+              {/* DROPDOWN DO USUÁRIO LOGADO */}
+              {user && isUserMenuOpen && (
+                <div className="absolute right-0 mt-3 w-56 bg-white rounded-xl shadow-2xl border border-gray-100 py-2 z-[60] overflow-hidden animate-fadeIn">
+                  <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                    <p className="text-sm font-bold text-gray-900">{user.first_name} {user.last_name}</p>
+                    <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                  </div>
+
+                  <div className="py-2">
+                    <Link 
+                      href="/profile" 
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-900 transition"
+                    >
+                      <UserCircle className="w-4 h-4" /> Meu Perfil
+                    </Link>
+                    <Link 
+                      href="/orders" 
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-900 transition"
+                    >
+                      <Package className="w-4 h-4" /> Meus Pedidos
+                    </Link>
+                  </div>
+
+                  <div className="border-t border-gray-100 pt-2">
+                    <button 
+                      onClick={() => { logout(); setIsUserMenuOpen(false); router.push('/'); }}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition text-left"
+                    >
+                      <LogOut className="w-4 h-4" /> Sair
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             
             <button onClick={toggleCart} className="text-gray-900 hover:text-emerald-800 transition relative">
               <ShoppingBag className="w-5 h-5" />

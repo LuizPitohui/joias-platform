@@ -1,3 +1,5 @@
+from django.contrib.auth.password_validation import validate_password
+from django.core.validators import RegexValidator
 from rest_framework import serializers
 from .models import User, Address, SiteSettings, Category, Product, ProductImage, ProductAttribute, AttributeValue, CustomRequest, Order, OrderItem
 
@@ -174,3 +176,43 @@ class OrderSerializer(serializers.ModelSerializer):
             )
         
         return order
+    
+class RegistrationSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    phone = serializers.CharField(required=False, allow_blank=True)
+    
+    class Meta:
+        model = User
+        fields = ('username', 'password', 'email', 'first_name', 'last_name', 'phone')
+    
+    def validate_password(self, value):
+        # Validação manual extra (caso a do Django não seja rigorosa o suficiente na config padrão)
+        import re
+        if not re.search(r'[A-Z]', value):
+            raise serializers.ValidationError("A senha deve ter pelo menos uma letra maiúscula.")
+        if not re.search(r'[a-z]', value):
+            raise serializers.ValidationError("A senha deve ter pelo menos uma letra minúscula.")
+        if not re.search(r'[0-9]', value):
+            raise serializers.ValidationError("A senha deve ter pelo menos um número.")
+        if not re.search(r'[@$!%*?&#]', value):
+            raise serializers.ValidationError("A senha deve ter pelo menos um caractere especial (@$!%*?&#).")
+        return value
+
+    def create(self, validated_data):
+        phone = validated_data.pop('phone', '')
+        
+        user = User.objects.create(
+            username=validated_data['email'], # Usamos email como username
+            email=validated_data['email'],
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name']
+        )
+        user.set_password(validated_data['password'])
+        user.save()
+        
+        # Salva o telefone no perfil
+        if phone:
+            user.profile.phone = phone
+            user.profile.save()
+            
+        return user
