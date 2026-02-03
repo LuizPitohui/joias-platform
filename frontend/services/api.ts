@@ -2,46 +2,76 @@ import axios from "axios";
 
 export const api = axios.create({
   baseURL: "http://localhost:8000/api",
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-// Variável para evitar loops infinitos de retry
+// --- INTERCEPTOR DE REQUEST (Anexa o Token) ---
+api.interceptors.request.use((config) => {
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
+// Variável para evitar loops
 interface CustomAxiosRequestConfig extends axios.AxiosRequestConfig {
   _retry?: boolean;
 }
 
-// --- INTERCEPTOR (O SEGURANÇA INTELIGENTE) ---
+// --- INTERCEPTOR DE RESPOSTA (O Renovador de Sessão) ---
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   async (error) => {
     const originalRequest = error.config as CustomAxiosRequestConfig;
 
-    // Se o erro for 401 (Não Autorizado) e nós ainda não tentamos reenviar...
+    // Se o erro for 401 (Não autorizado) e ainda não tentamos renovar...
     if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true; // Marca que já tentamos uma vez para não entrar em loop
+      originalRequest._retry = true; // Marca para não entrar em loop infinito
 
-      console.warn("Token inválido detectado. Tentando acesso como visitante...");
+      try {
+        const refreshToken = typeof window !== "undefined" ? localStorage.getItem("refresh_token") : null;
+        
+        // Se tivermos um token de renovação, tentamos salvar a sessão
+        if (refreshToken) {
+          console.log("Renovando sessão expirada...");
+          
+          const response = await axios.post("http://localhost:8000/api/token/refresh/", {
+            refresh: refreshToken,
+          });
 
-      // 1. Limpa o token do navegador
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-      }
+          const { access } = response.data;
 
-      // 2. Remove o cabeçalho de autorização da instância global e da requisição atual
-      delete api.defaults.headers.common['Authorization'];
-      if (originalRequest.headers) {
-          delete originalRequest.headers['Authorization']; // Remove do request atual
-      }
+          // 1. Salva o novo token
+          if (typeof window !== "undefined") {
+            localStorage.setItem("access_token", access);
+          }
 
-      // 3. Se estivermos no Admin, manda pro login. Se for Loja Pública, tenta de novo sem token.
-      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
-          window.location.href = '/admin/login';
-          return Promise.reject(error);
-      } else {
-          // Tenta fazer a mesma requisição de novo, agora limpa (como anônimo)
+          // 2. Atualiza o cabeçalho padrão para o futuro
+          api.defaults.headers.common['Authorization'] = `Bearer ${access}`;
+          
+          // 3. Atualiza e repete a requisição original que tinha falhado
+          if (originalRequest.headers) {
+             originalRequest.headers.Authorization = `Bearer ${access}`;
+          }
+          
           return api(originalRequest);
+        }
+      } catch (refreshError) {
+        // Se a renovação falhar (ex: refresh token também venceu), aí sim desloga
+        console.error("Sessão expirada totalmente. Redirecionando para login.");
+        
+        if (typeof window !== "undefined") {
+           localStorage.removeItem("access_token");
+           localStorage.removeItem("refresh_token");
+           
+           // Opcional: Redirecionar para login
+           // window.location.href = "/login";
+        }
       }
     }
 
@@ -49,7 +79,7 @@ api.interceptors.response.use(
   }
 );
 
-// --- FUNÇÕES DE BUSCA ---
+// --- FUNÇÕES DE BUSCA (Mantidas Iguais) ---
 
 export const getProducts = async () => {
   try {
@@ -118,7 +148,6 @@ export const getNewArrivals = async () => {
 export const getOffers = async () => {
   try {
     const response = await api.get('/products/');
-    // Filtra apenas quem tem preço promocional válido
     return response.data.filter((p: any) => p.promotional_price && parseFloat(p.promotional_price) > 0);
   } catch (error) {
     console.error('Erro ao buscar ofertas:', error);
@@ -126,7 +155,6 @@ export const getOffers = async () => {
   }
 };
 
-// Função para deletar produto (Requer autenticação)
 export const deleteProduct = async (id: number) => {
   try {
     await api.delete(`/products/${id}/`);
@@ -137,13 +165,10 @@ export const deleteProduct = async (id: number) => {
   }
 };
 
-// Cria um produto enviando IMAGEM (precisa de FormData)
 export const createProduct = async (productData: FormData) => {
   try {
     const response = await api.post("/products/", productData, {
-      headers: {
-        "Content-Type": "multipart/form-data", // Importante para envio de arquivos
-      },
+      headers: { "Content-Type": "multipart/form-data" },
     });
     return response.data;
   } catch (error) {
@@ -152,13 +177,10 @@ export const createProduct = async (productData: FormData) => {
   }
 };
 
-// Atualiza produto (aceita FormData para caso tenha foto nova)
 export const updateProduct = async (id: number | string, productData: FormData) => {
   try {
     const response = await api.patch(`/products/${id}/`, productData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
+      headers: { "Content-Type": "multipart/form-data" },
     });
     return response.data;
   } catch (error) {
@@ -167,7 +189,6 @@ export const updateProduct = async (id: number | string, productData: FormData) 
   }
 };
 
-// Deleta uma imagem específica da galeria
 export const deleteProductImage = async (imageId: number) => {
   try {
     await api.delete(`/product-images/${imageId}/`);
@@ -178,18 +199,6 @@ export const deleteProductImage = async (imageId: number) => {
   }
 };
 
-// Busca a lista de pedidos
-export const getOrders = async () => {
-  try {
-    const response = await api.get("/orders/");
-    return response.data;
-  } catch (error) {
-    console.error("Erro ao buscar pedidos:", error);
-    return [];
-  }
-};
-
-// Busca um pedido específico (usaremos em breve)
 export const getOrderById = async (id: number | string) => {
   try {
     const response = await api.get(`/orders/${id}/`);
@@ -200,7 +209,6 @@ export const getOrderById = async (id: number | string) => {
   }
 };
 
-// Cria um novo pedido (Checkout)
 export const createOrder = async (orderData: any) => {
   try {
     const response = await api.post("/orders/", orderData);
@@ -224,4 +232,15 @@ export const createAddress = async (data: any) => {
 
 export const deleteAddress = async (id: number) => {
   await api.delete(`/addresses/${id}/`);
+};
+
+// --- PEDIDOS ---
+export const getOrders = async () => {
+  try {
+    const response = await api.get("/orders/");
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao buscar pedidos:", error);
+    throw error;
+  }
 };

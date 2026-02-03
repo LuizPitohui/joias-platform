@@ -3,54 +3,37 @@ from django.contrib.auth.models import AbstractUser
 from django.utils.text import slugify
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.contrib.auth.models import User
 
 # --- 1. USUÁRIO PERSONALIZADO ---
 class User(AbstractUser):
     """
     Usuário estendido para suportar CPF e Telefone.
-    O endereço será uma tabela separada para suportar múltiplos endereços se necessário.
     """
     cpf = models.CharField(max_length=14, unique=True, blank=True, null=True, help_text="Formato: 000.000.000-00")
     phone = models.CharField(max_length=20, blank=True, null=True, help_text="WhatsApp ou Celular")
-    
-    # Campos obrigatórios padrão do Django
     email = models.EmailField(unique=True)
 
     def __str__(self):
         return self.username
 
-class Address(models.Model):
-    """Endereço vinculado ao usuário para entregas."""
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='addresses')
-    street = models.CharField("Rua", max_length=255)
-    number = models.CharField("Número", max_length=20)
-    complement = models.CharField("Complemento", max_length=100, blank=True)
-    district = models.CharField("Bairro", max_length=100)
-    city = models.CharField("Cidade", max_length=100)
-    state = models.CharField("Estado", max_length=2)
-    zip_code = models.CharField("CEP", max_length=10)
-    
-    def __str__(self):
-        return f"{self.street}, {self.number} - {self.city}"
+# (AQUI EU REMOVI A CLASSE ADDRESS ANTIGA QUE CAUSAVA O ERRO)
 
 # --- 2. CONFIGURAÇÃO DO SITE (PAINEL DO DONO) ---
 class SiteSettings(models.Model):
     """
     Permite que o dono edite o site sem tocar no código.
-    Padrão Singleton: Só deve existir 1 registro dessa tabela.
     """
     site_name = models.CharField(max_length=100, default="Minha Joalheria")
     logo = models.ImageField(upload_to='site_config/', blank=True, null=True)
     
-    # Cores do tema (Frontend vai ler isso)
+    # Cores
     primary_color = models.CharField(max_length=7, default="#000000", help_text="Código Hex (ex: #000000)")
     secondary_color = models.CharField(max_length=7, default="#D4AF37", help_text="Cor secundária (ex: Dourado #D4AF37)")
     
     # Redes Sociais
     instagram_url = models.URLField(blank=True)
     facebook_url = models.URLField(blank=True)
-    whatsapp_number = models.CharField(max_length=20, blank=True, help_text="Apenas números para o link direto")
+    whatsapp_number = models.CharField(max_length=20, blank=True, help_text="Apenas números")
 
     # Jurídico
     terms_of_use = models.TextField("Termos de Uso", blank=True)
@@ -65,10 +48,6 @@ class SiteSettings(models.Model):
 # --- 3. ESTRUTURA DE PRODUTOS E CATEGORIAS ---
 
 class Category(models.Model):
-    """
-    Categorias com auto-relacionamento.
-    Ex: Anéis (Pai) -> Anéis de Formatura (Filho)
-    """
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True, blank=True)
     image = models.ImageField(upload_to='categories/', blank=True, null=True)
@@ -87,10 +66,6 @@ class Category(models.Model):
             return self.name
 
 class ProductAttribute(models.Model):
-    """
-    Define o NOME do atributo. Ex: 'Material', 'Pedra', 'Cor do Cristal'.
-    Isso permite criar filtros dinâmicos no frontend.
-    """
     name = models.CharField(max_length=50) # Ex: Material
     slug = models.SlugField(unique=True)
 
@@ -98,9 +73,6 @@ class ProductAttribute(models.Model):
         return self.name
 
 class AttributeValue(models.Model):
-    """
-    Define o VALOR do atributo. Ex: 'Ouro 18k', 'Prata 925', 'Rubi'.
-    """
     attribute = models.ForeignKey(ProductAttribute, on_delete=models.CASCADE, related_name='values')
     value = models.CharField(max_length=50) # Ex: Ouro 18k
     
@@ -115,13 +87,10 @@ class Product(models.Model):
     promotional_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='products')
-    
-    # Aqui está a mágica dos filtros. Um produto pode ter vários atributos.
-    # Ex: Anel X tem (Material: Ouro) E (Pedra: Esmeralda)
     attributes = models.ManyToManyField(AttributeValue, blank=True, related_name='products')
     
     is_active = models.BooleanField(default=True)
-    is_featured = models.BooleanField(default=False, help_text="Se marcado, aparece na lista de Novidades/Destaques")
+    is_featured = models.BooleanField(default=False, help_text="Destaque na Home")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
@@ -133,20 +102,18 @@ class Product(models.Model):
         return self.name
 
 class ProductImage(models.Model):
-    """Permite múltiplas fotos para o mesmo produto"""
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='products/')
-    is_cover = models.BooleanField(default=False, help_text="É a foto principal?")
+    is_cover = models.BooleanField(default=False, help_text="Foto principal?")
 
     def __str__(self):
         return f"Imagem de {self.product.name}"
 
-# --- 4. PEDIDOS PERSONALIZADOS ---
+# --- 4. PEDIDOS ---
 class CustomRequest(models.Model):
-    """Para o formulário de 'Orçamento Direto/Login Requerido'"""
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     description = models.TextField("Descrição do Pedido")
-    reference_image = models.ImageField(upload_to='custom_requests/', blank=True, null=True, help_text="Foto de referência do cliente")
+    reference_image = models.ImageField(upload_to='custom_requests/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, default='Pendente', choices=[
         ('Pendente', 'Pendente'),
@@ -156,7 +123,7 @@ class CustomRequest(models.Model):
     ])
 
     def __str__(self):
-        return f"Pedido de {self.user.username} - {self.status}"
+        return f"Pedido de {self.user.username}"
     
 class Order(models.Model):
     STATUS_CHOICES = (
@@ -164,46 +131,64 @@ class Order(models.Model):
         ('paid', 'Pago'),
         ('shipped', 'Enviado'),
         ('delivered', 'Entregue'),
-        ('cancelled', 'Cancelado'),
+        ('canceled', 'Cancelado'),
     )
 
-    # Relaciona com o Usuário (Cliente)
-    customer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
+    # Cliente é opcional (null=True) para permitir Compras como Visitante no futuro
+    customer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     
-    # Dados do Pedido
+    # Dados do Visitante (para quando não tem customer)
+    guest_name = models.CharField(max_length=255, blank=True, null=True)
+    guest_email = models.EmailField(blank=True, null=True)
+
+    # CORREÇÃO PRINCIPAL: O endereço deve ser TEXTO para gravar o histórico
+    address = models.TextField(verbose_name="Endereço de Entrega") 
+    
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    total = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
-    
-    # Endereço (Simplificado para o exemplo)
-    address = models.TextField(blank=True, null=True)
 
     def __str__(self):
-        return f"Pedido #{self.id} - {self.customer.email}"
+        return f"Pedido {self.id} - {self.guest_name or self.customer}"
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
-    price = models.DecimalField(max_digits=10, decimal_places=2) # Preço no momento da compra
+    price = models.DecimalField(max_digits=10, decimal_places=2)
 
     def __str__(self):
         return f"{self.quantity}x {self.product.name}"
     
-# Modelo para guardar dados extras do usuário
+# --- 5. PERFIL E ENDEREÇOS ---
+
 class Profile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     phone = models.CharField(max_length=20, blank=True, null=True)
     is_phone_verified = models.BooleanField(default=False)
     address = models.TextField(blank=True, null=True)
-    
-    # Campo para guardar o código de verificação temporário
     verification_code = models.CharField(max_length=6, blank=True, null=True)
 
     def __str__(self):
         return f"Perfil de {self.user.username}"
 
-# Sinal Mágico: Cria o Profile automaticamente quando um User é criado
+# ESTA É A VERSÃO CORRETA DA CLASS ADDRESS (A MAIS COMPLETA)
+class Address(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='addresses')
+    name = models.CharField(max_length=50, default="Casa") 
+    zip_code = models.CharField(max_length=9)
+    street = models.CharField(max_length=200)
+    neighborhood = models.CharField(max_length=100) # (Antes era district, agora é neighborhood)
+    city = models.CharField(max_length=100)
+    state = models.CharField(max_length=2)
+    number = models.CharField(max_length=20)
+    complement = models.CharField(max_length=100, blank=True, null=True)
+    reference_point = models.CharField(max_length=200, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.zip_code}"
+
+# Signals
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
@@ -212,20 +197,3 @@ def create_user_profile(sender, instance, created, **kwargs):
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
     instance.profile.save()
-
-class Address(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='addresses')
-    name = models.CharField(max_length=50, default="Casa") 
-    zip_code = models.CharField(max_length=9) # Mudei a ordem só pra organizar
-    street = models.CharField(max_length=200)
-    neighborhood = models.CharField(max_length=100)
-    city = models.CharField(max_length=100)
-    state = models.CharField(max_length=2)
-    number = models.CharField(max_length=20)
-    
-    # NOVOS CAMPOS
-    complement = models.CharField(max_length=100, blank=True, null=True) # Apt/Bloco
-    reference_point = models.CharField(max_length=200, blank=True, null=True)
-
-    def __str__(self):
-        return f"{self.name} - {self.zip_code}"

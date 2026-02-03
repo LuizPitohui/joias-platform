@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
 
 // Tipagem do Item no Carrinho
-interface CartItem {
+export interface CartItem {
   id: number;
   name: string;
   price: number;
@@ -12,12 +12,14 @@ interface CartItem {
   // Detalhes extras importantes para joias
   selectedSize?: string;
   engraving?: string;
+  base_price?: string | number; // Adicionado para compatibilidade com backend se necessário
 }
 
 interface CartContextType {
   items: CartItem[];
   addToCart: (item: CartItem) => void;
   removeFromCart: (id: number) => void;
+  clearCart: () => void; // <--- ADICIONADO: A função que faltava
   cartCount: number;
   isCartOpen: boolean;
   toggleCart: () => void;
@@ -61,13 +63,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
+  // --- NOVA FUNÇÃO: LIMPAR CARRINHO ---
+  const clearCart = () => {
+    setItems([]); // Zera o estado
+    localStorage.removeItem("joias-cart"); // Limpa do navegador
+  };
+
   // Soma a quantidade total de itens (ex: 2 anéis + 1 colar = 3 itens)
   const cartCount = items.reduce((acc, item) => acc + item.quantity, 0);
 
   const toggleCart = () => setIsCartOpen(!isCartOpen);
 
   return (
-    <CartContext.Provider value={{ items, addToCart, removeFromCart, cartCount, isCartOpen, toggleCart }}>
+    <CartContext.Provider value={{ 
+        items, 
+        addToCart, 
+        removeFromCart, 
+        clearCart, // <--- Exportando a função para ser usada no Checkout
+        cartCount, 
+        isCartOpen, 
+        toggleCart 
+    }}>
       {children}
     </CartContext.Provider>
   );

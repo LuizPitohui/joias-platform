@@ -83,13 +83,26 @@ class ProductImageViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
 
 class OrderViewSet(viewsets.ModelViewSet):
-    queryset = Order.objects.all().order_by('-created_at') # Mais recentes primeiro
     serializer_class = OrderSerializer
-    permission_classes = [IsAdminOrReadOnly] 
-    
-    # Filtros úteis para o painel
-    filterset_fields = ['status', 'customer__email']
-    search_fields = ['id', 'customer__email']
+    # 1. SEGURANÇA MÁXIMA: Só entra se tiver crachá (Token)
+    permission_classes = [IsAuthenticated]
+
+    # 2. Filtro de Segurança (Cada um vê o seu)
+    def get_queryset(self):
+        user = self.request.user
+        
+        # Admin vê tudo
+        if user.is_staff:
+            return Order.objects.all().order_by('-created_at')
+            
+        # Usuário normal vê apenas os pedidos DELE
+        # (Não precisamos mais checar if is_authenticated, o permission_classes já garantiu isso)
+        return Order.objects.filter(customer=user).order_by('-created_at')
+
+    # 3. Associar o Usuário ao Pedido Automaticamente
+    def perform_create(self, serializer):
+        # Como agora é obrigatório estar logado, o self.request.user sempre existe!
+        serializer.save(customer=self.request.user)
 
 
 # View de Registro

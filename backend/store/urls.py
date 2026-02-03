@@ -1,25 +1,24 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import RegisterView, SendSMSCodeView, VerifySMSCodeView
-# Importe todas as views necessárias
+from .views import RegisterView, SendSMSCodeView, VerifySMSCodeView, UserMeView
 from .views import (
     ProductViewSet, 
     CategoryViewSet, 
     ProductImageViewSet, 
     OrderViewSet,
-    UserMeView,
     AddressViewSet
 )
 
 router = DefaultRouter()
-# --- OS REGISTROS FICAM AQUI (FORA DO URLPATTERNS) ---
+
+# --- REGISTROS DO ROUTER ---
 router.register(r'products', ProductViewSet)
 router.register(r'categories', CategoryViewSet)
 router.register(r'product-images', ProductImageViewSet)
-router.register(r'orders', OrderViewSet)
-router.register(r'addresses', AddressViewSet, basename='address') # basename é importante aqui
+router.register(r'orders', OrderViewSet, basename='order')
+router.register(r'addresses', AddressViewSet, basename='address')
 
-# --- A LISTA URLPATTERNS FICA AQUI EMBAIXO ---
+# --- URLPATTERNS ---
 urlpatterns = [
     path('', include(router.urls)),
     path('register/', RegisterView.as_view(), name='register'),

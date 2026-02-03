@@ -1,8 +1,6 @@
 from django.contrib.auth.password_validation import validate_password
-from django.core.validators import RegexValidator
 from rest_framework import serializers
-from .models import User, Address, SiteSettings, Category, Product, ProductImage, ProductAttribute, AttributeValue, CustomRequest, Order, OrderItem, Address
-
+from .models import User, Address, SiteSettings, Category, Product, ProductImage, AttributeValue, CustomRequest, Order, OrderItem
 
 # --- CONFIGURAÇÃO DO SITE ---
 class SiteSettingsSerializer(serializers.ModelSerializer):
@@ -10,12 +8,16 @@ class SiteSettingsSerializer(serializers.ModelSerializer):
         model = SiteSettings
         fields = '__all__'
 
-# --- USUÁRIOS E ENDEREÇOS ---
+# --- ENDEREÇOS (Definido antes de User para poder ser usado nele) ---
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = Address
-        fields = '__all__'
+        fields = [
+            'id', 'name', 'zip_code', 'street', 'neighborhood', 
+            'city', 'state', 'number', 'complement', 'reference_point'
+        ]
 
+# --- USUÁRIOS ---
 class UserSerializer(serializers.ModelSerializer):
     addresses = AddressSerializer(many=True, read_only=True)
     
@@ -28,13 +30,53 @@ class UserSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(**validated_data)
         return user
 
+# --- REGISTRO DE USUÁRIO ---
+class RegistrationSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    phone = serializers.CharField(required=False, allow_blank=True)
+    
+    class Meta:
+        model = User
+        fields = ('username', 'password', 'email', 'first_name', 'last_name', 'phone')
+    
+    def validate_password(self, value):
+        import re
+        if not re.search(r'[A-Z]', value):
+            raise serializers.ValidationError("A senha deve ter pelo menos uma letra maiúscula.")
+        if not re.search(r'[a-z]', value):
+            raise serializers.ValidationError("A senha deve ter pelo menos uma letra minúscula.")
+        if not re.search(r'[0-9]', value):
+            raise serializers.ValidationError("A senha deve ter pelo menos um número.")
+        # if not re.search(r'[@$!%*?&#]', value):
+        #     raise serializers.ValidationError("A senha deve ter pelo menos um caractere especial.")
+        return value
+
+    def create(self, validated_data):
+        phone = validated_data.pop('phone', '')
+        # Força minúsculo no email/username para evitar duplicidade e erro de login
+        email_lower = validated_data['email'].lower()
+        
+        user = User.objects.create(
+            username=email_lower,
+            email=email_lower,
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name']
+        )
+        user.set_password(validated_data['password'])
+        user.save()
+        
+        if phone:
+            user.profile.phone = phone
+            user.profile.save()
+            
+        return user
+
 # --- CATEGORIAS ---
 class CategorySerializer(serializers.ModelSerializer):
     subcategories = serializers.SerializerMethodField()
 
     class Meta:
         model = Category
-        # ADICIONEI 'show_on_home' NA LISTA ABAIXO
         fields = ['id', 'name', 'slug', 'image', 'parent', 'show_on_home', 'subcategories']
 
     def get_subcategories(self, obj):
@@ -58,8 +100,6 @@ class ProductSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     attributes = AttributeValueSerializer(many=True, read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
-
-# --- CAMPO: Para receber o upload ---
     uploaded_images = serializers.ListField(
         child=serializers.ImageField(allow_empty_file=False, use_url=False),
         write_only=True,
@@ -77,37 +117,21 @@ class ProductSerializer(serializers.ModelSerializer):
             'is_active', 'is_featured'
         ]
 
-# --- MÉTODO MÁGICO: Sobrescreve a criação padrão ---
     def create(self, validated_data):
-        # 1. Separa as imagens dos dados do produto
         uploaded_images = validated_data.pop('uploaded_images', [])
-        
-        # 2. Cria o produto normalmente (Nome, Preço, etc)
         product = Product.objects.create(**validated_data)
-
-        # 3. Agora cria as imagens vinculadas a esse produto
         for image in uploaded_images:
             ProductImage.objects.create(product=product, image=image)
-
-# --- MÉTODO: Sobrescreve a atualização ---
         return product
-    def update(self, instance, validated_data):
-        # 1. Tira as imagens da validação (se houver)
-        uploaded_images = validated_data.pop('uploaded_images', None)
 
-        # 2. Atualiza os campos normais (nome, preço, etc)
+    def update(self, instance, validated_data):
+        uploaded_images = validated_data.pop('uploaded_images', None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-
-        # 3. Se o usuário mandou imagens novas, adiciona elas
         if uploaded_images:
-            # Opcional: Se quiser que substitua a foto antiga, descomente a linha abaixo:
-            # instance.images.all().delete() 
-            
             for image in uploaded_images:
                 ProductImage.objects.create(product=instance, image=image)
-
         return instance
 
 # --- PEDIDOS PERSONALIZADOS ---
@@ -117,8 +141,9 @@ class CustomRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomRequest
         fields = '__all__'
-        read_only_fields = ['user'] # O usuário é pego automaticamente do login
+        read_only_fields = ['user']
 
+# --- PEDIDOS ---
 class OrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_image = serializers.SerializerMethodField()
@@ -128,99 +153,41 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'product_name', 'product_image', 'quantity', 'price']
 
     def get_product_image(self, obj):
-        # Tenta pegar a primeira imagem do produto
         img = obj.product.images.first()
         if img:
-            return img.image.url # Retorna a URL completa
+            return img.image.url
         return None
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
-    
-    # Campo para receber os dados dos itens na criação (Write Only)
-    # Esperamos uma lista de dicionários: [{'product_id': 1, 'quantity': 2, 'price': 100}, ...]
     items_data = serializers.ListField(child=serializers.DictField(), write_only=True)
 
     class Meta:
         model = Order
         fields = ['id', 'customer', 'guest_name', 'guest_email', 'status', 'total', 'created_at', 'address', 'items', 'items_data']
         extra_kwargs = {
-            'customer': {'read_only': True} # O backend define o user, não o frontend
+            'customer': {'read_only': True}
         }
 
     def create(self, validated_data):
-        # 1. Separa os dados dos itens
         items_payload = validated_data.pop('items_data', [])
-        
-        # 2. Pega o usuário logado (se houver) do contexto da requisição
         request = self.context.get('request')
+        
+        # Define o cliente se estiver logado
         if request and request.user.is_authenticated:
             validated_data['customer'] = request.user
-            # Se logado, usa o email/nome do cadastro como fallback se não vier no payload
             if not validated_data.get('guest_email'):
                 validated_data['guest_email'] = request.user.email
 
-        # 3. Cria o Pedido
         order = Order.objects.create(**validated_data)
 
-        # 4. Cria os Itens do Pedido
+        # Cria os itens
         for item in items_payload:
-            # O frontend manda 'product_id', precisamos pegar a instância do produto
             product = Product.objects.get(id=item['product_id'])
-            
             OrderItem.objects.create(
                 order=order,
                 product=product,
                 quantity=item['quantity'],
-                price=item['price'] # Salvamos o preço da época da compra
+                price=item['price']
             )
-        
         return order
-    
-class RegistrationSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
-    phone = serializers.CharField(required=False, allow_blank=True)
-    
-    class Meta:
-        model = User
-        fields = ('username', 'password', 'email', 'first_name', 'last_name', 'phone')
-    
-    def validate_password(self, value):
-        # Validação manual extra (caso a do Django não seja rigorosa o suficiente na config padrão)
-        import re
-        if not re.search(r'[A-Z]', value):
-            raise serializers.ValidationError("A senha deve ter pelo menos uma letra maiúscula.")
-        if not re.search(r'[a-z]', value):
-            raise serializers.ValidationError("A senha deve ter pelo menos uma letra minúscula.")
-        if not re.search(r'[0-9]', value):
-            raise serializers.ValidationError("A senha deve ter pelo menos um número.")
-        if not re.search(r'[@$!%*?&#]', value):
-            raise serializers.ValidationError("A senha deve ter pelo menos um caractere especial (@$!%*?&#).")
-        return value
-
-    def create(self, validated_data):
-        phone = validated_data.pop('phone', '')
-        
-        user = User.objects.create(
-            username=validated_data['email'], # Usamos email como username
-            email=validated_data['email'],
-            first_name=validated_data['first_name'],
-            last_name=validated_data['last_name']
-        )
-        user.set_password(validated_data['password'])
-        user.save()
-        
-        # Salva o telefone no perfil
-        if phone:
-            user.profile.phone = phone
-            user.profile.save()
-            
-        return user
-    
-class AddressSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Address
-        fields = [
-            'id', 'name', 'zip_code', 'street', 'neighborhood', 
-            'city', 'state', 'number', 'complement', 'reference_point'
-        ]
