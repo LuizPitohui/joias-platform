@@ -37,13 +37,14 @@ services:
       # Permite o Frontend acessar a API
       - CORS_ALLOWED_ORIGINS=http://localhost:3000
 
-  # 3. Frontend (Next.js)
+# 3. Frontend (Next.js)
   web:
     build: ./frontend
     container_name: joias_frontend
     volumes:
       - ./frontend:/app
-      - /app/node_modules # Evita apagar a pasta node_modules do container
+      - /app/node_modules
+      - /app/.next # <--- ESTA É A MÁGICA QUE FALTAVA! Isola o cache do Turbopack
     ports:
       - "3000:3000"
     environment:

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-// CORREÇÃO: Importando os ícones que faltavam
 import { Instagram, Facebook, Twitter, MapPin, Phone, Mail } from "lucide-react";
 
 export default function Footer() {
@@ -48,14 +47,25 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Coluna 3: Suporte */}
+          {/* Coluna 3: Suporte (AJUSTADO AQUI) */}
           <div>
             <h4 className="text-lg font-medium mb-6 text-white">Ajuda</h4>
             <ul className="space-y-3 text-sm text-gray-400">
-              <li><Link href="/contato" className="hover:text-emerald-400 transition">Fale Conosco</Link></li>
-              <li><Link href="/trocas" className="hover:text-emerald-400 transition">Trocas e Devoluções</Link></li>
-              <li><Link href="/privacidade" className="hover:text-emerald-400 transition">Política de Privacidade</Link></li>
-              <li><Link href="/faq" className="hover:text-emerald-400 transition">Perguntas Frequentes</Link></li>
+              <li>
+                <Link href="/ajuda#fale-conosco" className="hover:text-emerald-400 transition">
+                  Fale Conosco
+                </Link>
+              </li>
+              <li>
+                <Link href="/ajuda#privacidade" className="hover:text-emerald-400 transition">
+                  Política de Privacidade
+                </Link>
+              </li>
+              <li>
+                <Link href="/ajuda#faq" className="hover:text-emerald-400 transition">
+                  Perguntas Frequentes
+                </Link>
+              </li>
             </ul>
           </div>
 

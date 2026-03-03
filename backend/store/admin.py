@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Address, SiteSettings, Category, ProductAttribute, AttributeValue, Product, ProductImage, CustomRequest
+from .models import User, Address, SiteSettings, Category, ProductAttribute, AttributeValue, Product, ProductImage, CustomRequest, FAQ
 
 # --- 1. CONFIGURAÇÃO DE USUÁRIO ---
 admin.site.register(User, UserAdmin)
@@ -53,3 +53,8 @@ class CustomRequestAdmin(admin.ModelAdmin): # CORRIGIDO AQUI
     list_display = ('user', 'status', 'created_at')
     list_filter = ('status', 'created_at')
     readonly_fields = ('user', 'description', 'reference_image')
+
+@admin.register(FAQ)
+class FAQAdmin(admin.ModelAdmin):
+    list_display = ('question', 'is_active', 'order')
+    list_editable = ('is_active', 'order')

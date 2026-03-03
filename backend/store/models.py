@@ -1,3 +1,4 @@
+import uuid # <--- IMPORTANTE PARA O ID DO PEDIDO
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.text import slugify
@@ -15,8 +16,6 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
-
-# (AQUI EU REMOVI A CLASSE ADDRESS ANTIGA QUE CAUSAVA O ERRO)
 
 # --- 2. CONFIGURAÇÃO DO SITE (PAINEL DO DONO) ---
 class SiteSettings(models.Model):
@@ -37,6 +36,9 @@ class SiteSettings(models.Model):
 
     # Jurídico
     terms_of_use = models.TextField("Termos de Uso", blank=True)
+
+    # Política de Privacidade
+    privacy_policy = models.TextField("Política de Privacidade", blank=True)
     
     class Meta:
         verbose_name = "Configuração do Site"
@@ -45,14 +47,33 @@ class SiteSettings(models.Model):
     def __str__(self):
         return f"Configuração: {self.site_name}"
 
+# --- 6. PERGUNTAS FREQUENTES (FAQ) ---
+class FAQ(models.Model):
+    question = models.CharField("Pergunta", max_length=255)
+    answer = models.TextField("Resposta")
+    is_active = models.BooleanField("Ativo", default=True)
+    order = models.PositiveIntegerField("Ordem de Exibição", default=0, help_text="Use números para ordenar (ex: 1, 2, 3)")
+
+    class Meta:
+        verbose_name = "Pergunta Frequente"
+        verbose_name_plural = "Perguntas Frequentes"
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return self.question
 # --- 3. ESTRUTURA DE PRODUTOS E CATEGORIAS ---
 
 class Category(models.Model):
-    name = models.CharField(max_length=100)
-    slug = models.SlugField(unique=True, blank=True)
+    # ATUALIZADO PARA 255 (Correção do erro de seed)
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(unique=True, blank=True, max_length=255)
+    
     image = models.ImageField(upload_to='categories/', blank=True, null=True)
     parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subcategories')
     show_on_home = models.BooleanField(default=False, verbose_name="Mostrar na Página Inicial")
+    
+    # Novo: Referência para saber o tipo de foto no seed (opcional, mas útil)
+    parent_name_ref = models.CharField(max_length=255, blank=True, null=True)
 
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -80,8 +101,10 @@ class AttributeValue(models.Model):
         return f"{self.attribute.name}: {self.value}"
 
 class Product(models.Model):
-    name = models.CharField(max_length=200)
-    slug = models.SlugField(unique=True, blank=True)
+    # ATUALIZADO PARA 255 (Correção do erro de seed)
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(unique=True, blank=True, max_length=255)
+    
     description = models.TextField()
     base_price = models.DecimalField(max_digits=10, decimal_places=2)
     promotional_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -127,36 +150,46 @@ class CustomRequest(models.Model):
     
 class Order(models.Model):
     STATUS_CHOICES = (
-        ('pending', 'Pendente'),
+        ('pending', 'Pendente (Aguardando Pagamento)'),
         ('paid', 'Pago'),
+        ('preparing', 'Preparando Envio'), # NOVO STATUS
         ('shipped', 'Enviado'),
         ('delivered', 'Entregue'),
         ('canceled', 'Cancelado'),
     )
 
-    # Cliente é opcional (null=True) para permitir Compras como Visitante no futuro
+    # NOVO: ID Público do Pedido (Ex: PED-A1B2C3)
+    order_number = models.CharField(max_length=12, unique=True, editable=False, null=True)
+
     customer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
     
-    # Dados do Visitante (para quando não tem customer)
     guest_name = models.CharField(max_length=255, blank=True, null=True)
     guest_email = models.EmailField(blank=True, null=True)
 
-    # CORREÇÃO PRINCIPAL: O endereço deve ser TEXTO para gravar o histórico
     address = models.TextField(verbose_name="Endereço de Entrega") 
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     total = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # GERA O CÓDIGO AUTOMÁTICO
+    def save(self, *args, **kwargs):
+        if not self.order_number:
+            random_part = uuid.uuid4().hex[:8].upper()
+            self.order_number = f"PED-{random_part}"
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Pedido {self.id} - {self.guest_name or self.customer}"
+        return f"Pedido {self.order_number or self.id} - {self.guest_name or self.customer}"
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2)
-
+    selected_attributes = models.JSONField(default=dict, blank=True, null=True)
+    
+    # Adicionada a quebra de linha aqui!
     def __str__(self):
         return f"{self.quantity}x {self.product.name}"
     
@@ -172,13 +205,12 @@ class Profile(models.Model):
     def __str__(self):
         return f"Perfil de {self.user.username}"
 
-# ESTA É A VERSÃO CORRETA DA CLASS ADDRESS (A MAIS COMPLETA)
 class Address(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='addresses')
     name = models.CharField(max_length=50, default="Casa") 
     zip_code = models.CharField(max_length=9)
     street = models.CharField(max_length=200)
-    neighborhood = models.CharField(max_length=100) # (Antes era district, agora é neighborhood)
+    neighborhood = models.CharField(max_length=100) 
     city = models.CharField(max_length=100)
     state = models.CharField(max_length=2)
     number = models.CharField(max_length=20)

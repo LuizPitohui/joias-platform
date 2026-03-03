@@ -4,8 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { api } from "@/services/api"; // <--- Importante
-import { Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { api } from "@/services/api";
+import { Eye, EyeOff, ArrowLeft, Loader2 } from "lucide-react"; // Adicionei Loader2
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,39 +23,41 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // 1. FAZ A REQUISIÇÃO AQUI NA PÁGINA
-      // O Django SimpleJWT espera a chave "username", mesmo que estejamos usando email.
-      // Usamos .toLowerCase() para garantir compatibilidade.
       const payload = {
         username: email.toLowerCase().trim(), 
         password: password
       };
 
-      console.log("Enviando login:", payload); // Debug no console do navegador
+      console.log("Tentando login com:", payload.username);
 
       const response = await api.post("/token/", payload);
 
-      // 2. SE DEU CERTO, PASSA OS TOKENS PRO CONTEXTO
       const userData = await login(response.data.access, response.data.refresh);
       
-      // 3. REDIRECIONAMENTO INTELIGENTE
       if (userData) {
         if (userData.is_staff) {
           router.push("/admin/dashboard");
         } else {
-          router.push("/"); // Cliente vai pra Home
+          router.push("/");
         }
       } else {
         router.push("/");
       }
       
     } catch (err: any) {
-      console.error("Erro detalhado:", err.response?.data); // Ajuda a ver o erro real
-      
-      if (err.response?.status === 401) {
+      console.error("Erro Completo do Login:", err); // Mostra o erro bruto para você depurar
+
+      if (!err.response) {
+        // SERVIDOR FORA DO AR OU ERRO DE REDE
+        setError("Não foi possível conectar ao servidor. Verifique se o backend está rodando.");
+      } 
+      else if (err.response.status === 401) {
+        // SENHA ERRADA
         setError("Email ou senha incorretos.");
-      } else {
-        setError("Erro ao conectar com o servidor.");
+      } 
+      else {
+        // OUTRO ERRO (ex: 500)
+        setError("Ocorreu um erro inesperado. Tente novamente.");
       }
     } finally {
       setLoading(false);
@@ -83,8 +85,8 @@ export default function LoginPage() {
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           
           {error && (
-            <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 animate-fadeIn">
+              <p className="text-sm text-red-700 font-medium">{error}</p>
             </div>
           )}
 
@@ -95,7 +97,7 @@ export default function LoginPage() {
                 <input
                   type="email"
                   required
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm transition"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -108,7 +110,7 @@ export default function LoginPage() {
                 <input
                   type={showPassword ? "text" : "password"}
                   required
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm transition"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -126,9 +128,9 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-900 hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 transition"
+                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-900 hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 transition items-center gap-2"
               >
-                {loading ? "Entrando..." : "Entrar"}
+                {loading ? <><Loader2 className="w-4 h-4 animate-spin"/> Entrando...</> : "Entrar"}
               </button>
             </div>
           </form>

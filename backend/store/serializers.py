@@ -1,6 +1,6 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from .models import User, Address, SiteSettings, Category, Product, ProductImage, AttributeValue, CustomRequest, Order, OrderItem
+from .models import User, Address, SiteSettings, Category, Product, ProductImage, AttributeValue, CustomRequest, Order, OrderItem, FAQ
 
 # --- CONFIGURAÇÃO DO SITE ---
 class SiteSettingsSerializer(serializers.ModelSerializer):
@@ -145,18 +145,49 @@ class CustomRequestSerializer(serializers.ModelSerializer):
 
 # --- PEDIDOS ---
 class OrderItemSerializer(serializers.ModelSerializer):
-    product_name = serializers.CharField(source='product.name', read_only=True)
+    # Mudamos tudo para SerializerMethodField para podermos usar regras de "try/except"
+    product_name = serializers.SerializerMethodField()
+    product_sku = serializers.SerializerMethodField() 
     product_image = serializers.SerializerMethodField()
+    product_attributes = serializers.SerializerMethodField() 
 
     class Meta:
         model = OrderItem
-        fields = ['id', 'product', 'product_name', 'product_image', 'quantity', 'price']
+        fields = ['id', 'product', 'product_name', 'product_sku', 'product_image', 'product_attributes', 'quantity', 'price']
+
+    def get_product_name(self, obj):
+        if not obj.product: return "Produto Indisponível/Deletado"
+        return obj.product.name
+
+    def get_product_sku(self, obj):
+        if not obj.product: return ""
+        # Tenta pegar o slug, se der erro, retorna vazio
+        try:
+            return obj.product.slug
+        except Exception:
+            return ""
 
     def get_product_image(self, obj):
-        img = obj.product.images.first()
-        if img:
-            return img.image.url
+        if not obj.product: return None
+        try:
+            img = obj.product.images.first()
+            if img and hasattr(img, 'image') and img.image:
+                request = self.context.get('request')
+                if request:
+                    return request.build_absolute_uri(img.image.url)
+                return img.image.url
+        except Exception:
+            pass
         return None
+
+    def get_product_attributes(self, obj):
+        if not obj.product: return []
+        try:
+            attributes = obj.product.attributes.all()
+            return [{"name": attr.attribute.name, "value": attr.value} for attr in attributes]
+        except Exception:
+            return []
+
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
@@ -164,7 +195,8 @@ class OrderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Order
-        fields = ['id', 'customer', 'guest_name', 'guest_email', 'status', 'total', 'created_at', 'address', 'items', 'items_data']
+        # CORREÇÃO CRUCIAL AQUI: Removi o 'address_details' da lista de fields, deixando apenas o 'address'.
+        fields = ['id', 'order_number', 'customer', 'guest_name', 'guest_email', 'status', 'total', 'created_at', 'address', 'items', 'items_data']
         extra_kwargs = {
             'customer': {'read_only': True}
         }
@@ -191,3 +223,36 @@ class OrderSerializer(serializers.ModelSerializer):
                 price=item['price']
             )
         return order
+
+# --- LOGIN PERSONALIZADO (EMAIL NO LUGAR DE USERNAME) ---
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        # O frontend envia o email no campo "username"
+        email_or_username = attrs.get("username")
+        password = attrs.get("password")
+
+        if email_or_username and password:
+            # Tenta achar o usuário pelo email
+            try:
+                user = User.objects.get(email=email_or_username)
+                attrs["username"] = user.username # Troca pelo username real que o Django espera
+            except User.DoesNotExist:
+                # Se não achou por email, deixa passar (pode ser login por username mesmo)
+                pass
+        
+        return super().validate(attrs)
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+# --- FAQ ---
+class FAQSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FAQ
+        fields = ['id', 'question', 'answer']

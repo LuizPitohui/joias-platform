@@ -244,3 +244,41 @@ export const getOrders = async () => {
     throw error;
   }
 };
+
+export const getSiteSettings = async () => {
+  try {
+    const response = await api.get("/settings/"); // Verifique se essa rota de settings existe no seu urls.py
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao buscar configurações:", error);
+    return null;
+  }
+};
+
+export const getFAQs = async () => {
+  try {
+    const response = await api.get("/faqs/");
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao buscar FAQs:", error);
+    return [];
+  }
+};
+
+// Pega as estatísticas do Admin
+export const getAdminDashboardStats = async () => {
+  const response = await api.get('/admin/dashboard/stats/');
+  return response.data;
+};
+
+// Puxa detalhes de UM pedido específico
+export const getOrderDetails = async (id: string) => {
+  const response = await api.get(`/orders/${id}/`);
+  return response.data;
+};
+
+// Atualiza o status do pedido (Pendente -> Pago -> Enviado, etc)
+export const updateOrderStatus = async (id: string, status: string) => {
+  const response = await api.patch(`/orders/${id}/`, { status });
+  return response.data;
+};
