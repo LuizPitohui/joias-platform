@@ -29,52 +29,61 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config as CustomAxiosRequestConfig;
 
+    // 1. TRAVA DE SEGURANÇA MÁXIMA: 
+    // Se a requisição que falhou for a PRÓPRIA TENTATIVA DE RENOVAR O TOKEN,
+    // não tente interceptar de novo, apenas jogue o erro pra frente (quebra o loop).
+    if (originalRequest.url?.includes('/token/refresh/')) {
+       return Promise.reject(error);
+    }
+
     // Se o erro for 401 (Não autorizado) e ainda não tentamos renovar...
     if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true; // Marca para não entrar em loop infinito
+      originalRequest._retry = true; // Marca para não entrar em loop infinito na requisição original
 
       try {
         const refreshToken = typeof window !== "undefined" ? localStorage.getItem("refresh_token") : null;
         
-        // Se tivermos um token de renovação, tentamos salvar a sessão
         if (refreshToken) {
           console.log("Renovando sessão expirada...");
           
+          // IMPORTANTE: Faz a requisição usando axios puro, sem passar pela instância "api"
+          // Isso garante que essa chamada de renovação não caia nos nossos interceptors
           const response = await axios.post("http://localhost:8000/api/token/refresh/", {
             refresh: refreshToken,
           });
 
           const { access } = response.data;
 
-          // 1. Salva o novo token
           if (typeof window !== "undefined") {
             localStorage.setItem("access_token", access);
           }
 
-          // 2. Atualiza o cabeçalho padrão para o futuro
           api.defaults.headers.common['Authorization'] = `Bearer ${access}`;
           
-          // 3. Atualiza e repete a requisição original que tinha falhado
           if (originalRequest.headers) {
              originalRequest.headers.Authorization = `Bearer ${access}`;
           }
           
+          // Repete a requisição original com o novo token
           return api(originalRequest);
         }
       } catch (refreshError) {
-        // Se a renovação falhar (ex: refresh token também venceu), aí sim desloga
-        console.error("Sessão expirada totalmente. Redirecionando para login.");
+        // Se a renovação falhar, limpa tudo e desloga silenciosamente
+        console.error("Sessão expirada totalmente.");
         
         if (typeof window !== "undefined") {
            localStorage.removeItem("access_token");
            localStorage.removeItem("refresh_token");
-           
-           // Opcional: Redirecionar para login
-           // window.location.href = "/login";
+           delete api.defaults.headers.common['Authorization'];
+           // ATENÇÃO: Se quiser forçar o redirecionamento aqui, use window.location.href = '/login';
         }
+        
+        // Retorna o erro original para que as telas (como a de Produto) parem de tentar carregar
+        return Promise.reject(refreshError);
       }
     }
 
+    // Se não for 401, ou se a renovação já tentou e falhou, rejeita normalmente.
     return Promise.reject(error);
   }
 );
@@ -281,4 +290,82 @@ export const getOrderDetails = async (id: string) => {
 export const updateOrderStatus = async (id: string, status: string) => {
   const response = await api.patch(`/orders/${id}/`, { status });
   return response.data;
+};
+
+// --- GERENCIAMENTO DE CATÁLOGO (Categorias e Atributos) ---
+
+export const getAttributes = async () => {
+  try {
+    // Agora sim! Buscando as opções reais (Ouro 18k, Aro 16, etc)
+    const response = await api.get("/attribute-values/"); 
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao buscar atributos:", error);
+    return [];
+  }
+};
+
+export const createCategory = async (categoryData: FormData) => {
+  try {
+    const response = await api.post("/categories/", categoryData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao criar categoria:", error);
+    throw error;
+  }
+};
+
+// Busca os nomes dos grupos (ex: Material, Tamanho)
+export const getAttributeGroups = async () => {
+  const response = await api.get("/product-attributes/");
+  return response.data;
+};
+
+// Cria um novo valor para um grupo
+export const createAttributeValue = async (data: { attribute: number, value: string }) => {
+  const response = await api.post("/attribute-values/", data);
+  return response.data;
+};
+
+// Cria um novo GRUPO de atributo (ex: "Cor", "Material")
+export const createAttributeGroup = async (data: { name: string; slug: string }) => {
+  const response = await api.post("/product-attributes/", data);
+  return response.data;
+};
+
+// --- USUÁRIOS / CLIENTES ---
+export const getUsers = async () => {
+  try {
+    const response = await api.get("/users/");
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao buscar clientes:", error);
+    return [];
+  }
+};
+
+// --- CONFIGURAÇÕES DO SITE ---
+export const updateSiteSettings = async (formData: FormData) => {
+  try {
+    // Adicione a barra no final: /settings/1/ 
+    const response = await api.patch("/settings/1/", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Erro ao atualizar configurações:", error);
+    throw error;
+  }
+};
+
+// --- FAQs ---
+export const createFAQ = async (data: { question: string, answer: string }) => {
+  const response = await api.post("/faqs/", data);
+  return response.data;
+};
+
+export const deleteFAQ = async (id: number) => {
+  await api.delete(`/faqs/${id}/`);
 };

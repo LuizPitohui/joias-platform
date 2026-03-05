@@ -17,12 +17,14 @@ from django_filters.rest_framework import DjangoFilterBackend
 # --- IMPORTS LOCAIS (MODELS & SERIALIZERS) ---
 from .models import (
     User, SiteSettings, Category, Product, CustomRequest, 
-    ProductImage, Order, Address, FAQ
+    ProductImage, Order, Address, FAQ,
+    ProductAttribute, AttributeValue
 )
 from .serializers import (
     UserSerializer, SiteSettingsSerializer, CategorySerializer, 
     ProductSerializer, CustomRequestSerializer, ProductImageSerializer, 
-    OrderSerializer, AddressSerializer, FAQSerializer, RegistrationSerializer
+    OrderSerializer, AddressSerializer, FAQSerializer, RegistrationSerializer,
+    ProductAttributeSerializer, AttributeValueSerializer
 )
 
 
@@ -42,10 +44,31 @@ class IsAdminOrReadOnly(permissions.BasePermission):
 # ==========================================
 # VIEWS DE CATÁLOGO E CONFIGURAÇÕES
 # ==========================================
+
 class SiteSettingsViewSet(viewsets.ModelViewSet):
     queryset = SiteSettings.objects.all()
     serializer_class = SiteSettingsSerializer
     permission_classes = [IsAdminOrReadOnly]
+
+    # Sobrescrevemos o método de pegar o objeto para garantir que sempre use o ID 1
+    def get_object(self):
+        obj, created = SiteSettings.objects.get_or_create(pk=1)
+        return obj
+
+    # Ajustamos a listagem para retornar o objeto direto em vez de uma lista []
+    def list(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    # Garantimos que o update (PATCH) funcione mesmo que o ID na URL seja qualquer um
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
 
 class CategoryViewSet(viewsets.ModelViewSet):
     # Pega apenas quem NÃO tem pai (categorias principais)
@@ -234,3 +257,27 @@ class DashboardStatsView(APIView):
             "ticket_medio": float(ticket_medio),
             "chart_data": grafico
         })
+
+
+# ==========================================
+# VIEWS DE ATRIBUTOS E VALORES
+# ==========================================
+class ProductAttributeViewSet(viewsets.ModelViewSet):
+    queryset = ProductAttribute.objects.all()
+    serializer_class = ProductAttributeSerializer
+
+class ProductAttributeValueViewSet(viewsets.ModelViewSet):
+    queryset = AttributeValue.objects.all()
+    serializer_class = AttributeValueSerializer
+
+# ==========================================
+# VIEWS DE USUÁRIOS
+# ==========================================
+class UserViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Lista todos os usuários cadastrados. Apenas administradores podem acessar.
+    """
+    from django.contrib.auth import get_user_model
+    queryset = get_user_model().objects.all().order_by('-id')
+    serializer_class = UserSerializer
+    permission_classes = [IsAdminUser]

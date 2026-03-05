@@ -19,33 +19,38 @@ class User(AbstractUser):
 
 # --- 2. CONFIGURAÇÃO DO SITE (PAINEL DO DONO) ---
 class SiteSettings(models.Model):
-    """
-    Permite que o dono edite o site sem tocar no código.
-    """
     site_name = models.CharField(max_length=100, default="Minha Joalheria")
     logo = models.ImageField(upload_to='site_config/', blank=True, null=True)
     
+    # Adicionando o e-mail que faltava para o Fale Conosco
+    contact_email = models.EmailField(default="contato@loja.com")
+    
     # Cores
-    primary_color = models.CharField(max_length=7, default="#000000", help_text="Código Hex (ex: #000000)")
-    secondary_color = models.CharField(max_length=7, default="#D4AF37", help_text="Cor secundária (ex: Dourado #D4AF37)")
+    primary_color = models.CharField(max_length=7, default="#000000")
+    secondary_color = models.CharField(max_length=7, default="#D4AF37")
     
     # Redes Sociais
     instagram_url = models.URLField(blank=True)
-    facebook_url = models.URLField(blank=True)
-    whatsapp_number = models.CharField(max_length=20, blank=True, help_text="Apenas números")
+    whatsapp_number = models.CharField(max_length=20, blank=True)
 
-    # Jurídico
+    # Jurídico e Textos
     terms_of_use = models.TextField("Termos de Uso", blank=True)
-
-    # Política de Privacidade
     privacy_policy = models.TextField("Política de Privacidade", blank=True)
     
+    # Campo para o documento PDF que você solicitou
+    privacy_policy_pdf = models.FileField(upload_to='docs/', blank=True, null=True)
+
     class Meta:
         verbose_name = "Configuração do Site"
         verbose_name_plural = "Configuração do Site"
 
+    def save(self, *args, **kwargs):
+        # Força o ID como 1 para garantir que só exista um registro de configuração
+        self.pk = 1
+        super(SiteSettings, self).save(*args, **kwargs)
+
     def __str__(self):
-        return f"Configuração: {self.site_name}"
+        return self.site_name
 
 # --- 6. PERGUNTAS FREQUENTES (FAQ) ---
 class FAQ(models.Model):

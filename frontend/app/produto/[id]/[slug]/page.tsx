@@ -24,39 +24,66 @@ interface ProductDetail {
 
 export default function ProductPage() {
   const params = useParams(); 
+  
+  // 1. EXTRAÇÃO SEGURA: Tiramos o ID de dentro do objeto instável 'params'
+  // e transformamos numa string sólida (ex: "121").
+  const rawId = params?.id;
+  const productId = Array.isArray(rawId) ? rawId[0] : rawId;
+
   const [product, setProduct] = useState<any | null>(null);
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Se o ID ainda não estiver pronto na URL, nem tenta executar.
+    if (!productId) return;
+
+    // 2. TRAVA DE SEGURANÇA: Evita que o React tente atualizar a tela se o usuário 
+    // já tiver saído da página antes da API terminar de responder.
+    let isMounted = true;
+
     async function loadData() {
-      // MUDANÇA 2: Pegamos o ID da URL
-      // params.id vem da pasta [id]
-      const id = Array.isArray(params.id) ? params.id[0] : params.id;
-      
-      if (id) {
+      try {
         setLoading(true);
-        // MUDANÇA 3: Buscamos pelo ID
-        const data = await getProductById(id);
+        
+        // Busca o produto específico
+        const data = await getProductById(productId as string);
+        if (!isMounted) return; // Aborta se a página fechou
+        
         setProduct(data);
 
-        // Carrega relacionados
-        const allProducts = await getRelatedProducts();
+        // Se encontrou o produto, carrega os relacionados
         if (data) {
-           setRelatedProducts(allProducts.filter((p: any) => p.id !== data.id).slice(0, 4));
+          const allProducts = await getRelatedProducts();
+          if (!isMounted) return;
+          
+          setRelatedProducts(allProducts.filter((p: any) => p.id !== data.id).slice(0, 4));
         }
-        setLoading(false);
+      } catch (error) {
+        console.error("Erro ao carregar os dados da joia:", error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
+    
     loadData();
-  }, [params.id]); // Monitora mudanças no ID
+
+    // 3. LIMPEZA: Quando o usuário sai da página, desativamos a trava.
+    return () => {
+      isMounted = false;
+    };
+    
+  // 4. A MÁGICA: O useEffect agora SÓ ESCUTA a string pura "121", e não o objeto params inteiro.
+  }, [productId]); 
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-white">Carregando joia...</div>;
   if (!product) return <div className="min-h-screen flex items-center justify-center bg-white">Produto não encontrado.</div>;
 
   return (
     <main className="min-h-screen bg-white py-12">
-        {/* ... O RESTO DO CÓDIGO HTML PERMANECE IGUAL ... */}
+        {/* ... O RESTO DO SEU CÓDIGO HTML PERMANECE EXATAMENTE IGUAL DAQUI PRA BAIXO ... */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <Link href="/" className="inline-flex items-center text-gray-400 hover:text-emerald-800 mb-8 transition group">
                 <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" /> Voltar para a loja

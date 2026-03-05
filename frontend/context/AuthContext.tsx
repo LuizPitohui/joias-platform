@@ -39,19 +39,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const fetchUserProfile = async () => {
+const fetchUserProfile = async () => {
     try {
       const response = await api.get("/users/me/");
       setUser(response.data);
       return response.data;
     } catch (error) {
-      console.error("Erro ao carregar perfil", error);
+      console.error("Erro ao carregar perfil. O token pode estar vencido.", error);
+      
+      // A MÁGICA SALVADORA AQUI: Se o Django recusar o token, nós o destruímos!
+      // Isso impede o loop infinito da página de login tentar usar um token morto.
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      delete api.defaults.headers.common['Authorization'];
+      setUser(null);
+      
     } finally {
       setLoading(false);
     }
     return null;
   };
-
+  
   const login = async (accessToken: string, refreshToken: string) => {
     localStorage.setItem("access_token", accessToken);
     localStorage.setItem("refresh_token", refreshToken);

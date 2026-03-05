@@ -1,6 +1,6 @@
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from .models import User, Address, SiteSettings, Category, Product, ProductImage, AttributeValue, CustomRequest, Order, OrderItem, FAQ
+from .models import User, Address, SiteSettings, Category, Product, ProductImage, AttributeValue, CustomRequest, Order, OrderItem, FAQ, ProductAttribute
 
 # --- CONFIGURAÇÃO DO SITE ---
 class SiteSettingsSerializer(serializers.ModelSerializer):
@@ -256,3 +256,9 @@ class FAQSerializer(serializers.ModelSerializer):
     class Meta:
         model = FAQ
         fields = ['id', 'question', 'answer']
+
+# --- ATRIBUTOS (Grupos) ---
+class ProductAttributeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductAttribute
+        fields = '__all__'
